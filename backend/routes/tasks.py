@@ -1,9 +1,10 @@
 """Task API blueprint."""
 
 import re
+import sqlite3
 from datetime import date
 
-from flask import Blueprint, g, jsonify, request
+from flask import Blueprint, current_app, g, jsonify, request
 
 from models import VALID_STATUSES, Task
 from routes.auth import login_required
@@ -126,7 +127,20 @@ def get_task(task_id):
 @login_required
 def create_task():
     payload = validate_payload(request.get_json(silent=True))
-    task = Task.create(user_id=g.user.id, **payload)
+
+    try:
+        task = Task.create(user_id=g.user.id, **payload)
+    except sqlite3.Error as error:
+        current_app.logger.exception("Task insert failed")
+        raise ApiError(
+            "The task could not be saved to the database. Please try again.", 500
+        ) from error
+    except Exception as error:
+        current_app.logger.exception("Unexpected task creation error")
+        raise ApiError(
+            "Something went wrong while creating the task. Please try again.", 500
+        ) from error
+
     return jsonify({"task": task.to_dict()}), 201
 
 

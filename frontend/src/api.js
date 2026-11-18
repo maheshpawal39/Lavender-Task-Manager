@@ -6,7 +6,10 @@ async function request(path, options = {}) {
   try {
     response = await fetch(`${BASE_URL}${path}`, {
       credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
       ...options,
     });
   } catch (networkError) {
@@ -19,22 +22,44 @@ async function request(path, options = {}) {
 
   if (response.status === 204) return null;
 
+  const rawBody = await response.text();
   let data = null;
   try {
-    data = await response.json();
+    data = rawBody ? JSON.parse(rawBody) : null;
   } catch {
-    // Non-JSON response (e.g. server crash); fall through to a generic error.
+    // The API should always return JSON. HTML errors usually come from the
+    // Vite proxy or Flask's debug page, so expose the status instead of hiding it.
   }
 
   if (!response.ok) {
+    let message = data?.error;
+    if (!message) {
+      if (response.status === 401) {
+        message = 'Your session has expired. Please sign in again.';
+      } else if ([502, 503, 504].includes(response.status)) {
+        message = 'The task server is temporarily unavailable. Make sure the Flask backend is running, then try again.';
+      } else if (response.status === 404) {
+        message =
+          'The API endpoint was not found. Open the app through the Vite dev server (port 5173) or Flask (port 5055), not a static file server.';
+      } else if (response.status >= 500) {
+        message = `The server could not complete the request (error ${response.status}). Please try again.`;
+      } else {
+        message = `Request failed (error ${response.status}). Please try again.`;
+      }
+    }
+
     if (response.status === 401 && !path.startsWith('/auth/')) {
       window.dispatchEvent(new Event('auth:expired'));
     }
 
-    const error = new Error(data?.error || 'Something went wrong. Please try again.');
+    const error = new Error(message);
     error.status = response.status;
     error.fields = data?.fields || {};
     throw error;
+  }
+
+  if (data === null) {
+    throw new Error('The server returned an unexpected response. Please try again.');
   }
 
   return data;

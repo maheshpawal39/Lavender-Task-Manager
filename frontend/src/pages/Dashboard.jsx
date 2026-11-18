@@ -67,11 +67,30 @@ export default function Dashboard({ user, onLogout }) {
 
   async function handleSave(payload) {
     const isEdit = modal.mode === 'edit';
+
     if (isEdit) {
       await taskApi.update(modal.task.id, payload);
     } else {
-      await taskApi.create(payload);
+      const data = await taskApi.create(payload);
+      const created = data.task;
+      const term = debouncedSearch.trim().toLowerCase();
+      const matchesSearch =
+        !term ||
+        created.title.toLowerCase().includes(term) ||
+        created.description.toLowerCase().includes(term);
+      const matchesFilter = filter === 'all' || filter === created.status;
+
+      // Show the saved task immediately; the refresh below keeps counts in sync.
+      if (matchesSearch && matchesFilter) {
+        setTasks((current) => [created, ...current]);
+      }
+      setStats((current) => ({
+        ...current,
+        total: current.total + 1,
+        [created.status]: current[created.status] + 1,
+      }));
     }
+
     setModal(null);
     setToast({ message: isEdit ? 'Task updated' : 'Task added', tone: 'success' });
     refresh();
