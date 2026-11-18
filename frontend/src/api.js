@@ -1,10 +1,20 @@
-const BASE_URL = '/api';
+const configuredBase = import.meta.env.VITE_API_BASE_URL?.replace(/\/+$/, '');
+const BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
 async function request(path, options = {}) {
-  const response = await fetch(`${BASE_URL}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
-    ...options,
-  });
+  let response;
+  try {
+    response = await fetch(`${BASE_URL}${path}`, {
+      headers: { 'Content-Type': 'application/json' },
+      ...options,
+    });
+  } catch (networkError) {
+    const error = new Error(
+      "Can't reach the server. Make sure the Flask backend is running on port 5055.",
+    );
+    error.cause = networkError;
+    throw error;
+  }
 
   if (response.status === 204) return null;
 

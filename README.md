@@ -103,6 +103,25 @@ python app.py
 Flask serves the built React app at `http://127.0.0.1:5055`, so a single server
 runs the whole application.
 
+### Frontend connection troubleshooting
+
+The frontend calls `/api` (a relative URL) on purpose:
+
+- **Development:** Vite proxies `/api` to `http://127.0.0.1:5055` (see `vite.config.js`).
+- **Production build:** Flask serves both the React app and the API, so `/api` is same-origin.
+
+If you see "Can't reach the server":
+
+1. Make sure the Flask backend is running on port `5055`.
+2. Start the frontend with `npm run dev` instead of opening `index.html` directly.
+   Opening the file (or using a static server without a proxy) has no `/api` route.
+3. If you must serve the frontend separately, copy `.env.example` to `.env.local`,
+   keep the absolute URL, and restart Vite:
+
+   ```env
+   VITE_API_BASE_URL=http://127.0.0.1:5055/api
+   ```
+
 ## API reference
 
 | Method   | Endpoint             | Description                                        |
