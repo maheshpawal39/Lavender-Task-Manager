@@ -86,3 +86,24 @@ export const CheckCircleIcon = (props) => (
     <path d="m8.5 12 2.5 2.5 4.5-5" />
   </Icon>
 );
+
+export const EyeIcon = (props) => (
+  <Icon {...props}>
+    <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" />
+    <circle cx="12" cy="12" r="3" />
+  </Icon>
+);
+
+export const EyeOffIcon = (props) => (
+  <Icon {...props}>
+    <path d="M10.6 6.1A9.8 9.8 0 0 1 12 6c6 0 9.5 6 9.5 6a16 16 0 0 1-2.2 2.9M6.2 6.2C3.9 8 2.5 12 2.5 12S6 18 12 18a9.6 9.6 0 0 0 4.1-.9" />
+    <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2M3 3l18 18" />
+  </Icon>
+);
+
+export const LogOutIcon = (props) => (
+  <Icon {...props}>
+    <path d="M14 8V5.5A1.5 1.5 0 0 0 12.5 4h-6A1.5 1.5 0 0 0 5 5.5v13A1.5 1.5 0 0 0 6.5 20h6a1.5 1.5 0 0 0 1.5-1.5V16" />
+    <path d="M10 12h9m-3-3 3 3-3 3" />
+  </Icon>
+);

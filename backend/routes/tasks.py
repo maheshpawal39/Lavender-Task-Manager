@@ -3,9 +3,10 @@
 import re
 from datetime import date
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, g, jsonify, request
 
 from models import VALID_STATUSES, Task
+from routes.auth import login_required
 
 tasks_bp = Blueprint("tasks", __name__, url_prefix="/api")
 
@@ -84,7 +85,7 @@ def validate_payload(data, partial=False):
 
 
 def get_task_or_404(task_id):
-    task = Task.get(task_id)
+    task = Task.get(task_id, g.user.id)
     if task is None:
         raise ApiError("Task not found.", 404)
     return task
@@ -99,6 +100,7 @@ def handle_api_error(error):
 
 
 @tasks_bp.get("/tasks")
+@login_required
 def list_tasks():
     status = request.args.get("status", "all").lower()
     search = request.args.get("search", "").strip()
@@ -107,6 +109,7 @@ def list_tasks():
         raise ApiError("Status filter must be 'all', 'pending' or 'completed'.")
 
     tasks = Task.list(
+        user_id=g.user.id,
         status=None if status == "all" else status,
         search=search or None,
     )
@@ -114,18 +117,21 @@ def list_tasks():
 
 
 @tasks_bp.get("/tasks/<int:task_id>")
+@login_required
 def get_task(task_id):
     return jsonify({"task": get_task_or_404(task_id).to_dict()})
 
 
 @tasks_bp.post("/tasks")
+@login_required
 def create_task():
     payload = validate_payload(request.get_json(silent=True))
-    task = Task.create(**payload)
+    task = Task.create(user_id=g.user.id, **payload)
     return jsonify({"task": task.to_dict()}), 201
 
 
 @tasks_bp.route("/tasks/<int:task_id>", methods=["PUT", "PATCH"])
+@login_required
 def update_task(task_id):
     task = get_task_or_404(task_id)
     payload = validate_payload(request.get_json(silent=True), partial=request.method == "PATCH")
@@ -134,6 +140,7 @@ def update_task(task_id):
 
 
 @tasks_bp.delete("/tasks/<int:task_id>")
+@login_required
 def delete_task(task_id):
     task = get_task_or_404(task_id)
     task.delete()
@@ -141,5 +148,6 @@ def delete_task(task_id):
 
 
 @tasks_bp.get("/stats")
+@login_required
 def get_stats():
-    return jsonify(Task.stats())
+    return jsonify(Task.stats(g.user.id))

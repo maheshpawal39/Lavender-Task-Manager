@@ -1,24 +1,55 @@
 """Mini Task Manager - Flask application entry point."""
 
 import os
+import secrets
+from datetime import timedelta
 from pathlib import Path
 
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 
 from database import init_app as init_database
+from routes.auth import auth_bp
 from routes.tasks import tasks_bp
 
 BASE_DIR = Path(__file__).resolve().parent
 FRONTEND_DIST = BASE_DIR.parent / "frontend" / "dist"
+INSTANCE_DIR = BASE_DIR / "instance"
+
+
+def load_secret_key(instance_path):
+    """Use SECRET_KEY from the environment or a stable local key file."""
+    env_key = os.environ.get("SECRET_KEY")
+    if env_key:
+        return env_key
+
+    key_file = Path(instance_path) / "secret_key"
+    if key_file.exists():
+        return key_file.read_text(encoding="utf-8").strip()
+
+    key = secrets.token_hex(32)
+    key_file.write_text(key, encoding="utf-8")
+    return key
 
 
 def create_app(test_config=None):
-    app = Flask(__name__, instance_relative_config=True)
+    INSTANCE_DIR.mkdir(parents=True, exist_ok=True)
+
+    app = Flask(
+        __name__,
+        instance_path=str(INSTANCE_DIR),
+        instance_relative_config=True,
+    )
     app.config.from_mapping(
         DATABASE=os.environ.get(
-            "TASKMATE_DATABASE", str(Path(app.instance_path) / "tasks.db")
+            "TASKMATE_DATABASE", str(INSTANCE_DIR / "tasks.db")
         ),
+        SECRET_KEY=load_secret_key(INSTANCE_DIR),
+        SESSION_COOKIE_HTTPONLY=True,
+        SESSION_COOKIE_SAMESITE="Lax",
+        SESSION_COOKIE_SECURE=os.environ.get("SESSION_COOKIE_SECURE", "").lower()
+        in ("1", "true", "yes"),
+        PERMANENT_SESSION_LIFETIME=timedelta(days=30),
         JSON_SORT_KEYS=False,
         MAX_CONTENT_LENGTH=64 * 1024,
     )
@@ -26,10 +57,20 @@ def create_app(test_config=None):
     if test_config:
         app.config.update(test_config)
 
-    Path(app.instance_path).mkdir(parents=True, exist_ok=True)
-    CORS(app, resources={r"/api/*": {"origins": "*"}})
+    cors_origins = [
+        origin.strip()
+        for origin in os.environ.get(
+            "CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173"
+        ).split(",")
+        if origin.strip()
+    ]
+    CORS(
+        app,
+        resources={r"/api/*": {"origins": cors_origins, "supports_credentials": True}},
+    )
     init_database(app)
 
+    app.register_blueprint(auth_bp)
     app.register_blueprint(tasks_bp)
 
     @app.get("/api/health")

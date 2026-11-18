@@ -11,7 +11,7 @@ import Toast from '../components/Toast.jsx';
 
 const EMPTY_STATS = { total: 0, pending: 0, completed: 0 };
 
-export default function Dashboard() {
+export default function Dashboard({ user, onLogout }) {
   const [tasks, setTasks] = useState([]);
   const [stats, setStats] = useState(EMPTY_STATS);
   const [filter, setFilter] = useState('all');
@@ -128,7 +128,11 @@ export default function Dashboard() {
   return (
     <div className="page">
       <div className="app-shell">
-        <Header onNewTask={() => setModal({ mode: 'create' })} />
+        <Header
+          user={user}
+          onLogout={onLogout}
+          onNewTask={() => setModal({ mode: 'create' })}
+        />
 
         <main>
           <StatsBoard stats={stats} activeFilter={filter} onFilter={setFilter} />
