@@ -1,3 +1,4 @@
+﻿
 """Mini Task Manager - Flask application entry point."""
 
 import os
@@ -40,15 +41,23 @@ def create_app(test_config=None):
         instance_path=str(INSTANCE_DIR),
         instance_relative_config=True,
     )
+
+    is_production = (
+        os.environ.get("SESSION_COOKIE_SECURE", "").lower()
+        in ("1", "true", "yes")
+    )
+
     app.config.from_mapping(
         DATABASE=os.environ.get(
             "TASKMATE_DATABASE", str(INSTANCE_DIR / "tasks.db")
         ),
         SECRET_KEY=load_secret_key(INSTANCE_DIR),
+
+        # Session security
         SESSION_COOKIE_HTTPONLY=True,
-        SESSION_COOKIE_SAMESITE="Lax",
-        SESSION_COOKIE_SECURE=os.environ.get("SESSION_COOKIE_SECURE", "").lower()
-        in ("1", "true", "yes"),
+        SESSION_COOKIE_SAMESITE="None" if is_production else "Lax",
+        SESSION_COOKIE_SECURE=is_production,
+
         PERMANENT_SESSION_LIFETIME=timedelta(days=30),
         JSON_SORT_KEYS=False,
         MAX_CONTENT_LENGTH=64 * 1024,
@@ -60,14 +69,22 @@ def create_app(test_config=None):
     cors_origins = [
         origin.strip()
         for origin in os.environ.get(
-            "CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173"
+            "CORS_ORIGINS",
+            "http://localhost:5173,http://127.0.0.1:5173"
         ).split(",")
         if origin.strip()
     ]
+
     CORS(
         app,
-        resources={r"/api/*": {"origins": cors_origins, "supports_credentials": True}},
+        resources={
+            r"/api/*": {
+                "origins": cors_origins,
+                "supports_credentials": True,
+            }
+        },
     )
+
     init_database(app)
 
     app.register_blueprint(auth_bp)
@@ -94,29 +111,33 @@ def create_app(test_config=None):
     @app.errorhandler(500)
     def internal_error(error):
         app.logger.error("Unhandled error: %s", error)
-        return jsonify({"error": "Something went wrong on the server."}), 500
+        return jsonify(
+            {"error": "Something went wrong on the server."}
+        ), 500
 
-    # Serve the production build when it exists; Vite handles this during dev.
+    # Serve the production build when it exists.
     @app.get("/")
     @app.get("/<path:path>")
     def serve_frontend(path=""):
         if not (FRONTEND_DIST / "index.html").exists():
-            return jsonify(
-                {
-                    "message": "Task Manager API is running.",
-                    "hint": "Run the React dev server (npm run dev) or build the frontend.",
-                    "api": "/api/tasks",
-                }
-            )
+            return jsonify({
+                "message": "Task Manager API is running.",
+                "hint": "Run the React dev server (npm run dev) or build the frontend.",
+                "api": "/api/tasks",
+            })
+
         requested = FRONTEND_DIST / path
+
         if path and requested.is_file():
             return send_from_directory(FRONTEND_DIST, path)
+
         return send_from_directory(FRONTEND_DIST, "index.html")
 
     return app
 
 
 app = create_app()
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5055))
