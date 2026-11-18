@@ -1,0 +1,11 @@
+{
+  "name": "task-managar-by-mashru",
+  "version": "1.0.0",
+  "description": "A calm, premium-looking task manager. It now runs as a **single HTML file** — no server, no npm, no build step.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "type": "commonjs"
+}
