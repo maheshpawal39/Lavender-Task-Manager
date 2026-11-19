@@ -1,10 +1,10 @@
 """Authentication API: register, login, logout and session lookup."""
 
 import re
-import sqlite3
 from functools import wraps
 
 from flask import Blueprint, g, jsonify, request, session
+from sqlalchemy.exc import IntegrityError
 
 from models import Task, User
 
@@ -96,7 +96,7 @@ def register():
             email=fields["email"],
             password=fields["password"],
         )
-    except sqlite3.IntegrityError:
+    except IntegrityError:
         return api_error(
             "An account with this email already exists.",
             409,

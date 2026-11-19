@@ -1,10 +1,10 @@
 """Task API blueprint."""
 
 import re
-import sqlite3
 from datetime import date
 
 from flask import Blueprint, current_app, g, jsonify, request
+from sqlalchemy.exc import SQLAlchemyError
 
 from models import VALID_STATUSES, Task
 from routes.auth import login_required
@@ -130,7 +130,7 @@ def create_task():
 
     try:
         task = Task.create(user_id=g.user.id, **payload)
-    except sqlite3.Error as error:
+    except SQLAlchemyError as error:
         current_app.logger.exception("Task insert failed")
         raise ApiError(
             "The task could not be saved to the database. Please try again.", 500

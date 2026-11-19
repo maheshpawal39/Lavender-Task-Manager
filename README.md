@@ -1,8 +1,7 @@
 # Lavender · Task Manager
 
-A small, calm task manager with a soft lavender interface. Built with React, Flask and SQLite.
-
-![Theme](https://img.shields.io/badge/theme-lavender-B69AE8) ![Backend](https://img.shields.io/badge/backend-Flask-8B6CCF) ![Database](https://img.shields.io/badge/database-SQLite-DCCCF7)
+A small, calm task manager with a soft lavender interface. React frontend,
+Flask API, and PostgreSQL database.
 
 ## Features
 
@@ -16,146 +15,158 @@ A small, calm task manager with a soft lavender interface. Built with React, Fla
 - Search tasks by title or description
 - Compact dashboard with total, pending and completed counts
 - Input validation and clear API error messages
-- Persistent local storage in SQLite
+- PostgreSQL storage with SQLAlchemy ORM and connection pooling
+- Alembic migrations for safe schema changes
 - Responsive layout with a minimal lavender theme
 
 ## Tech stack
 
-| Layer    | Technology          |
-| -------- | ------------------- |
-| Frontend | React, Vite, CSS    |
-| Backend  | Python, Flask       |
-| Database | SQLite              |
+| Layer | Technology |
+| --- | --- |
+| Frontend | React, Vite, CSS |
+| Backend | Python, Flask |
+| ORM | SQLAlchemy / Flask-SQLAlchemy |
+| Database | PostgreSQL (psycopg 3) |
+| Migrations | Flask-Migrate / Alembic |
+| Deployment | Vercel (Python serverless) + external frontend |
 
 ## Project structure
 
 ```
 task-manager/
-├── frontend/
-│   ├── src/
-│   │   ├── components/      # Header, auth shell, password input, modals, icons
-│   │   ├── hooks/           # Dialog behavior
-│   │   ├── pages/           # Login, Register, Dashboard
-│   │   ├── utils/           # Due-date formatting
-│   │   ├── api.js           # API client (auth + tasks)
-│   │   ├── App.jsx          # Session check and page switching
-│   │   ├── main.jsx
-│   │   └── styles.css
-│   ├── index.html
-│   ├── package.json
-│   └── vite.config.js
+├── frontend/                 # React app (unchanged UI)
 ├── backend/
-│   ├── app.py               # Flask app factory and frontend serving
-│   ├── database.py          # SQLite connection, schema and migrations
-│   ├── models.py            # User and Task models
+│   ├── app.py                # Flask factory, CORS, sessions, health
+│   ├── database.py           # SQLAlchemy + PostgreSQL pool configuration
+│   ├── models.py             # User and Task models
 │   ├── routes/
-│   │   ├── auth.py          # Register, login, logout, session
-│   │   └── tasks.py         # Protected task REST API
+│   │   ├── auth.py           # Register / login / logout / session
+│   │   └── tasks.py          # Protected task API
+│   ├── migrations/           # Alembic migration scripts
+│   ├── scripts/
+│   │   └── migrate_sqlite_to_postgres.py
+│   ├── instance/             # Local secrets / legacy SQLite source (ignored)
+│   ├── .env.example
 │   └── requirements.txt
+├── api/index.py              # Vercel serverless entrypoint
+├── vercel.json
+├── requirements.txt          # Vercel dependency entrypoint
 └── README.md
 ```
 
-## Getting started
+## Environment variables
 
-Requires **Python 3.10+** and **Node.js 18+**.
+Create `backend/.env` from `backend/.env.example` for local development.
+Never commit real credentials.
 
-### 1. Backend
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `DATABASE_URL` | Yes | PostgreSQL URL, e.g. `postgresql://user:pass@host:5432/db?sslmode=require` |
+| `SECRET_KEY` | Yes (production) | Flask session signing key |
+| `FRONTEND_URL` | Yes (Vercel) | Frontend origin(s), comma-separated |
+| `SESSION_COOKIE_SECURE` | Production: `true` | Send cookies only over HTTPS |
+| `SESSION_COOKIE_SAMESITE` | Optional | `None` for cross-site frontend/backend, `Lax` locally |
+| `DB_POOL_SIZE` | Optional | SQLAlchemy pool size (default `2`) |
+| `DB_MAX_OVERFLOW` | Optional | Extra pooled connections (default `3`) |
+| `DB_POOL_RECYCLE` | Optional | Recycle connections after seconds (default `280`) |
+| `DB_POOL_TIMEOUT` | Optional | Pool checkout timeout (default `10`) |
+| `DB_CONNECT_TIMEOUT` | Optional | PostgreSQL connect timeout (default `5`) |
+| `DB_DISABLE_PREPARED_STATEMENTS` | Optional | `true` for transaction-mode poolers (PgBouncer) |
+
+`postgres://` URLs are normalized to `postgresql+psycopg://`. SQLite URLs are
+rejected; there is no SQLite runtime fallback.
+
+## Local development
+
+Requires **Python 3.10+**, **Node.js 18+**, and a **PostgreSQL server**.
+
+### 1. Start PostgreSQL
+
+Use a hosted database (Neon, Supabase, Vercel Postgres) or Docker:
 
 ```bash
-cd backend
-python -m venv venv
-# Windows
-venv\Scripts\activate
-# macOS / Linux
-source venv/bin/activate
-
-pip install -r requirements.txt
-python app.py
+docker run -d --name lavender-pg \
+  -e POSTGRES_USER=lavender \
+  -e POSTGRES_PASSWORD=choose-a-password \
+  -e POSTGRES_DB=lavender \
+  -p 5432:5432 postgres:16-alpine
 ```
 
-The API runs at `http://127.0.0.1:5055`. The SQLite database is created
-automatically at `backend/instance/tasks.db`.
+### 2. Backend setup
 
-> The port can be changed with the `PORT` environment variable, e.g. `PORT=8000 python app.py`.
-> If you change it, update the proxy target in `frontend/vite.config.js` too.
+```powershell
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+pip install -r backend\requirements.txt
 
-> **This workspace:** a ready-to-use virtual environment already exists at the project
-> root (`venv/`). From the project root you can simply run
-> `venv\Scripts\python.exe backend\app.py` and open `http://127.0.0.1:5055`.
+Copy-Item backend\.env.example backend\.env
+# Edit backend\.env and set DATABASE_URL, SECRET_KEY, FRONTEND_URL
 
-On first launch you will see the login page. Choose **Create an account** to register.
-If tasks already existed before authentication was added, they are automatically
-assigned to the first account you register, so no saved work is lost.
+cd backend
+$env:FLASK_APP = "app.py"
+..\venv\Scripts\flask.exe db upgrade
+..\venv\Scripts\python.exe app.py
+```
 
-### 2. Frontend (development)
+The API runs at `http://127.0.0.1:5055`. The database schema is **not** created
+automatically; `flask db upgrade` is required.
 
-In a second terminal:
+> This workspace already has a virtual environment at the project root
+> (`venv/`). Activate it or call `venv\Scripts\python.exe` directly.
 
-```bash
+### 3. Frontend
+
+```powershell
 cd frontend
 npm install
 npm run dev
 ```
 
-Open `http://localhost:5173`. Vite proxies `/api` requests to the Flask server.
+Open `http://localhost:5173`. Vite proxies `/api` to Flask on port `5055`.
 
-### 3. Production build
+### 4. Production build (single local server)
 
-```bash
+```powershell
 cd frontend
 npm run build
-cd ../backend
-python app.py
+cd ..\backend
+..\venv\Scripts\python.exe app.py
 ```
 
-Flask serves the built React app at `http://127.0.0.1:5055`, so a single server
-runs the whole application.
+Flask serves the built React app and API at `http://127.0.0.1:5055`.
 
-### Frontend connection troubleshooting
+## Migrating existing SQLite data
 
-The frontend calls `/api` (a relative URL) on purpose:
+The old database is **not deleted**. After the PostgreSQL schema exists:
 
-- **Development:** Vite proxies `/api` to `http://127.0.0.1:5055` (see `vite.config.js`).
-- **Production build:** Flask serves both the React app and the API, so `/api` is same-origin.
+```powershell
+$env:DATABASE_URL = "postgresql://..."
+.\venv\Scripts\python.exe backend\scripts\migrate_sqlite_to_postgres.py
+```
 
-If you see "Can't reach the server":
+Options:
 
-1. Make sure the Flask backend is running on port `5055`.
-2. Start the frontend with `npm run dev` instead of opening `index.html` directly.
-   Opening the file (or using a static server without a proxy) has no `/api` route.
-3. If you must serve the frontend separately, copy `.env.example` to `.env.local`,
-   keep the absolute URL, and restart Vite:
+```powershell
+# custom source path
+... migrate_sqlite_to_postgres.py --source C:\path\to\tasks.db
+```
 
-   ```env
-   VITE_API_BASE_URL=http://127.0.0.1:5055/api
-   ```
+The script opens SQLite read-only, preserves IDs, timestamps, due dates,
+password hashes and user ownership, and is idempotent (existing rows are
+skipped). PostgreSQL sequences are synchronized afterwards.
 
 ## Authentication
 
-- Passwords are hashed with Werkzeug's scrypt implementation; plaintext passwords
-  are never stored or returned by the API.
-- Login uses a signed, HTTP-only session cookie (`SameSite=Lax`). With
-  **Remember me** enabled the session lasts 30 days; otherwise it ends when the
-  browser closes.
-- The dashboard and all `/api/tasks` and `/api/stats` endpoints require a valid
-  session. Unauthenticated requests receive `401`.
-- Every task query is scoped to the logged-in user. Reading, editing or deleting
-  another user's task returns `404`.
-- The first account registered inherits any tasks created before authentication
-  existed, preserving old data.
+Authentication remains **session-based** (signed Flask cookie, HTTP-only). The
+project did not use Flask-Login or an RBAC/roles table; that architecture was
+left unchanged rather than replaced. Authorization is enforced per user for all
+task queries.
 
-The session signing key is read from the `SECRET_KEY` environment variable, or
-generated once at `backend/instance/secret_key`. Keep it stable so sessions survive
-server restarts.
-
-Environment options:
-
-| Variable | Purpose |
-| --- | --- |
-| `SECRET_KEY` | Session signing key (optional; a local key file is used otherwise) |
-| `SESSION_COOKIE_SECURE` | Set to `1` when serving over HTTPS |
-| `CORS_ORIGINS` | Comma-separated frontend origins for cross-origin dev |
-| `TASKMATE_DATABASE` | Alternate SQLite database path |
+- Passwords: Werkzeug scrypt hashes (compatible with existing hashes)
+- Sessions: signed cookie, 30 days with **Remember me**
+- `SESSION_COOKIE_SECURE=true` behind HTTPS
+- `SESSION_COOKIE_SAMESITE=None` when frontend/backend are cross-site
+- Protected endpoints return `401`; other users' tasks return `404`
 
 ## API reference
 
@@ -163,113 +174,141 @@ Environment options:
 
 | Method | Endpoint | Description |
 | --- | --- | --- |
-| `POST` | `/api/auth/register` | Create an account and start a session. |
-| `POST` | `/api/auth/login` | Sign in with email and password. |
-| `POST` | `/api/auth/logout` | End the current session. |
-| `GET` | `/api/auth/me` | Return the signed-in user. |
-
-Registration accepts `full_name`, `email` and `password` (minimum 8 characters).
-Login accepts `email`, `password` and an optional `remember_me` boolean.
+| `POST` | `/api/auth/register` | Create an account and start a session |
+| `POST` | `/api/auth/login` | Sign in (`email`, `password`, optional `remember_me`) |
+| `POST` | `/api/auth/logout` | End the current session |
+| `GET` | `/api/auth/me` | Return the signed-in user |
 
 ### Tasks (session required)
 
-| Method   | Endpoint             | Description                                        |
-| -------- | -------------------- | -------------------------------------------------- |
-| `GET`    | `/api/tasks`         | List tasks. Optional `status` and `search` params. |
-| `GET`    | `/api/tasks/<id>`    | Get one task.                                      |
-| `POST`   | `/api/tasks`         | Create a task.                                     |
-| `PATCH`  | `/api/tasks/<id>`    | Update selected fields.                            |
-| `PUT`    | `/api/tasks/<id>`    | Replace task details.                              |
-| `DELETE` | `/api/tasks/<id>`    | Delete a task.                                     |
-| `GET`    | `/api/stats`         | Total, pending and completed counts.               |
-| `GET`    | `/api/health`        | Health check (public).                             |
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| `GET` | `/api/tasks` | List own tasks (`status`, `search` params) |
+| `GET` | `/api/tasks/<id>` | Get one own task |
+| `POST` | `/api/tasks` | Create a task |
+| `PATCH` | `/api/tasks/<id>` | Update selected fields |
+| `PUT` | `/api/tasks/<id>` | Replace task details |
+| `DELETE` | `/api/tasks/<id>` | Delete a task |
+| `GET` | `/api/stats` | Total, pending and completed counts |
+| `GET` | `/api/health` | API + database health check |
 
-### Task payload
-
-```json
-{
-  "title": "Review project brief",
-  "description": "Check the lavender palette.",
-  "due_date": "2026-11-20",
-  "status": "pending"
-}
-```
-
-- `title` — required, 1–120 characters
-- `description` — optional, up to 500 characters
-- `due_date` — optional, `YYYY-MM-DD`
-- `status` — `pending` or `completed` (defaults to `pending`)
-
-Validation failures return `422` with an `error` message and per-field `fields`.
-Missing tasks return `404`.
-
-## Database
+## Database schema
 
 ```sql
 users (
-  id            INTEGER PRIMARY KEY AUTOINCREMENT,
-  full_name     TEXT NOT NULL,
-  email         TEXT NOT NULL UNIQUE,
+  id            SERIAL PRIMARY KEY,
+  full_name     VARCHAR(80) NOT NULL,
+  email         VARCHAR(254) NOT NULL,
   password_hash TEXT NOT NULL,
-  created_at    TEXT NOT NULL,
-  updated_at    TEXT NOT NULL
+  created_at    TIMESTAMPTZ NOT NULL,
+  updated_at    TIMESTAMPTZ NOT NULL,
+  CONSTRAINT uq_users_email UNIQUE (email)
 )
 
 tasks (
-  id          INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_id     INTEGER REFERENCES users (id) ON DELETE CASCADE,
-  title       TEXT NOT NULL,
+  id          SERIAL PRIMARY KEY,
+  user_id     INTEGER NULL REFERENCES users(id) ON DELETE CASCADE,
+  title       VARCHAR(120) NOT NULL,
   description TEXT NOT NULL DEFAULT '',
-  due_date    TEXT,
-  status      TEXT NOT NULL DEFAULT 'pending',
-  created_at  TEXT NOT NULL,
-  updated_at  TEXT NOT NULL
+  due_date    DATE NULL,
+  status      VARCHAR(20) NOT NULL DEFAULT 'pending'
+              CHECK (status IN ('pending', 'completed')),
+  created_at  TIMESTAMPTZ NOT NULL,
+  updated_at  TIMESTAMPTZ NOT NULL
 )
 ```
 
-Existing databases are migrated in place: the `users` table and `tasks.user_id`
-column are added without recreating or deleting the tasks table. To reset all data,
-stop the server and delete `backend/instance/tasks.db`. It is recreated on the next
-start.
+Indexes: `ix_tasks_user_id`, `ix_tasks_status`, `ix_tasks_due_date`.
+
+## Migrations
+
+Versioned Alembic migrations live in `backend/migrations`.
+
+```powershell
+cd backend
+$env:FLASK_APP = "app.py"
+..\venv\Scripts\flask.exe db upgrade      # apply
+..\venv\Scripts\flask.exe db current      # check revision
+```
+
+To create a new migration after a model change:
+
+```powershell
+..\venv\Scripts\flask.exe db migrate -m "describe change"
+# review the generated file before applying
+..\venv\Scripts\flask.exe db upgrade
+```
+
+Never use `db.create_all()` or automatic table recreation in production.
+
+## Deploying the backend to Vercel
+
+1. Create a PostgreSQL database and copy its connection string.
+2. Apply migrations from your machine/CI using the **direct** database URL:
+
+   ```powershell
+   $env:DATABASE_URL = "postgresql://direct-connection..."
+   $env:FLASK_APP = "app.py"
+   cd backend
+   ..\venv\Scripts\flask.exe db upgrade
+   ```
+
+3. Migrate legacy data once, if needed (run from the repository root):
+
+   ```powershell
+   .\venv\Scripts\python.exe backend\scripts\migrate_sqlite_to_postgres.py --source backend\instance\tasks.db
+   ```
+
+4. Import this repository into Vercel and set environment variables:
+
+   ```
+   DATABASE_URL=postgresql://...        (runtime/pooled URL; sslmode=require)
+   SECRET_KEY=<long-random-value>
+   FRONTEND_URL=https://your-frontend.vercel.app
+   SESSION_COOKIE_SECURE=true
+   SESSION_COOKIE_SAMESITE=None
+   DB_DISABLE_PREPARED_STATEMENTS=true  (when using a PgBouncer pooler)
+   ```
+
+5. Deploy. `api/index.py` exposes the Flask app and `vercel.json` routes all
+   requests to it. Dependencies are installed from the root `requirements.txt`.
+
+6. Deploy the frontend separately and use its exact HTTPS origin in
+   `FRONTEND_URL`. Set the frontend build-time API URL to the backend domain,
+   for example in `frontend/.env.production`:
+
+   ```env
+   VITE_API_BASE_URL=https://your-backend.vercel.app/api
+   ```
+
+   CORS allows credentials for that frontend origin, and sessions use
+   `SameSite=None; Secure` across domains.
+
+7. Do not deploy `backend/instance/` (legacy DB/secrets); it is excluded by
+   `.vercelignore`. Vercel builds are read-only, so schema changes must be run
+   through migrations, not at function startup.
 
 ## Testing the login system locally
 
-Start the backend (and optionally the Vite dev server) as described above, then open
-the app:
+Start the backend and frontend, then:
 
-```powershell
-.\venv\Scripts\python.exe backend\app.py
-# http://127.0.0.1:5055
+1. Open the app — login page appears; dashboard is hidden.
+2. Register; the dashboard opens.
+3. Add, edit, complete and delete a task; reload to confirm persistence.
+4. Log out; wrong password is rejected; correct login works.
+5. Enable **Remember me** and reload — session persists.
+6. Register a second account — it must have an empty task list and cannot access
+   the first account's tasks.
+7. Call `/api/tasks` without a session — expect `401`.
+8. Check `/api/health` — expect `{"status":"ok","database":"ok"}`.
 
-# optional live-reload frontend, second terminal
-cd frontend
-npm run dev
-# http://localhost:5173
-```
+## Frontend connection troubleshooting
 
-Manual checklist:
+The frontend calls `/api` relatively:
 
-1. Open the app — the login page should appear and the dashboard must not be visible.
-2. Click **Create an account**, submit empty fields and verify validation messages.
-3. Register with a password mismatch — it should be rejected.
-4. Register successfully — the dashboard opens, and any pre-auth task is visible.
-5. Add, edit, complete and delete a task; logout and log back in to confirm persistence.
-6. Log in with a wrong password — you should see "Incorrect email or password."
-7. Log in with **Remember me**, reload the page, and confirm the session stays active.
-8. Register a second account — it must start with an empty task list.
-9. Log out and try opening `/api/tasks` directly — it should return `401`.
+- Development: Vite proxies `/api` to `http://127.0.0.1:5055`.
+- Production: Flask serves the build locally; on Vercel the frontend calls the
+  backend domain configured in the frontend deployment.
 
-Optional API check with a cookie jar:
-
-```powershell
-curl.exe -i -c cookies.txt -X POST http://127.0.0.1:5055/api/auth/register `
-  -H "Content-Type: application/json" `
-  -d '{"full_name":"Test User","email":"test@example.com","password":"lavender123"}'
-
-curl.exe -b cookies.txt http://127.0.0.1:5055/api/tasks
-
-curl.exe -b cookies.txt -X POST http://127.0.0.1:5055/api/auth/logout
-```
-
-This creates a real local account. Use a temporary database via
-`$env:TASKMATE_DATABASE` if you do not want it in your main data file.
+If the API is unreachable, confirm `DATABASE_URL` is valid, migrations have been
+applied, and Flask is running on port `5055`.

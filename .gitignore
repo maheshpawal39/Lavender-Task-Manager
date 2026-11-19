@@ -16,6 +16,7 @@ npm-debug.log*
 .idea/
 .DS_Store
 Thumbs.db
+.vercel/
 
 # Env
 .env
